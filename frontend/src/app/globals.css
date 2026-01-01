@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0a0a0a;
+  --foreground: #fafafa;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* Regime badge colors */
+.regime-bull {
+  @apply bg-bull/20 text-bull border-bull;
+}
+
+.regime-bear {
+  @apply bg-bear/20 text-bear border-bear;
+}
+
+.regime-sideways {
+  @apply bg-sideways/20 text-sideways border-sideways;
+}
+
+/* Signal badges */
+.signal-strong-buy {
+  @apply bg-strong-buy text-white;
+}
+
+.signal-buy {
+  @apply bg-buy text-black;
+}
+
+.signal-hold {
+  @apply bg-hold text-white;
+}
+
+.signal-avoid {
+  @apply bg-avoid text-black;
+}
+
+.signal-strong-avoid {
+  @apply bg-strong-avoid text-white;
+}
+
+/* Cards */
+.card {
+  @apply bg-zinc-900 border border-zinc-800 rounded-xl p-4;
+}
+
+.card-header {
+  @apply text-lg font-semibold text-zinc-100 mb-3;
+}
