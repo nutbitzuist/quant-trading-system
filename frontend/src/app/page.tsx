@@ -2,6 +2,7 @@ import { RegimeIndicator } from '@/components/RegimeIndicator'
 import { ModelWeights } from '@/components/ModelWeights'
 import { StockRankings } from '@/components/StockRankings'
 import { ModelAgreement } from '@/components/ModelAgreement'
+import RunScreeningButton from '@/components/RunScreeningButton'
 
 export default function Dashboard() {
     return (
@@ -11,8 +12,11 @@ export default function Dashboard() {
                 <h1 className="text-2xl font-bold text-white">
                     Market Dashboard
                 </h1>
-                <div className="text-sm text-zinc-500">
-                    SET Smart API Connected
+                <div className="flex items-center gap-4">
+                    <RunScreeningButton />
+                    <div className="text-sm text-zinc-500">
+                        SET Smart API Connected
+                    </div>
                 </div>
             </div>
 
