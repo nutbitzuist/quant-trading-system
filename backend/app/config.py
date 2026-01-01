@@ -3,8 +3,9 @@ Application Configuration
 Environment variables and settings
 """
 
+import os
 from pydantic_settings import BaseSettings
-from typing import Optional
+from typing import Optional, List
 from functools import lru_cache
 
 
@@ -19,8 +20,13 @@ class Settings(BaseSettings):
     # API settings
     api_prefix: str = "/api"
     
-    # CORS settings
-    cors_origins: list = ["http://localhost:3000", "http://localhost:8000"]
+    # CORS settings - handle as string, parse manually
+    cors_origins_str: str = "http://localhost:3000,http://localhost:8000,https://nutquantsystem.vercel.app"
+    
+    @property
+    def cors_origins(self) -> List[str]:
+        """Parse CORS origins from comma-separated string."""
+        return [origin.strip() for origin in self.cors_origins_str.split(",") if origin.strip()]
     
     # Data settings
     data_cache_ttl: int = 3600  # 1 hour
