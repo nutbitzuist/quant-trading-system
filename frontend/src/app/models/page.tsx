@@ -1,34 +1,16 @@
 'use client'
 
-import { useModels } from '@/hooks/useData'
+import { useState, useEffect } from 'react'
 
-// Mock data
-const mockModels = [
-    // Momentum
-    { name: 'hqm', class_name: 'HQMModel', category: 'momentum', description: 'High-Quality Momentum', implemented: true },
-    { name: 'clenow', class_name: 'ClenowMomentumModel', category: 'momentum', description: 'Clenow Momentum', implemented: true },
-    { name: 'dual_momentum', class_name: 'DualMomentumModel', category: 'momentum', description: 'Dual Momentum', implemented: true },
-    { name: 'roc_multi', class_name: 'ROCMultiTimeframeModel', category: 'momentum', description: 'ROC Multi-Timeframe', implemented: true },
-    { name: '52w_high', class_name: 'FiftyTwoWeekHighModel', category: 'momentum', description: '52-Week High', implemented: true },
-    // Trend
-    { name: 'adx', class_name: 'ADXTrendModel', category: 'trend', description: 'ADX Trend Strength', implemented: true },
-    { name: 'multi_ema', class_name: 'MultiEMAModel', category: 'trend', description: 'Multi-EMA Matrix', implemented: true },
-    { name: 'supertrend', class_name: 'SupertrendModel', category: 'trend', description: 'Supertrend', implemented: true },
-    { name: 'ichimoku', class_name: 'IchimokuModel', category: 'trend', description: 'Ichimoku Cloud', implemented: true },
-    { name: 'psar', class_name: 'ParabolicSARModel', category: 'trend', description: 'Parabolic SAR', implemented: true },
-    // Fundamental
-    { name: 'quality', class_name: 'QualityModel', category: 'fundamental', description: 'Quality Factor', implemented: true },
-    { name: 'magic_formula', class_name: 'MagicFormulaModel', category: 'fundamental', description: 'Magic Formula', implemented: true },
-    { name: 'garp', class_name: 'GARPModel', category: 'fundamental', description: 'GARP', implemented: true },
-    { name: 'altman_z', class_name: 'AltmanZScoreModel', category: 'fundamental', description: 'Altman Z-Score', implemented: true },
-    { name: 'dividend', class_name: 'DividendModel', category: 'fundamental', description: 'Dividend Quality', implemented: true },
-    // Quant
-    { name: 'hmm_regime', class_name: 'HMMRegimeModel', category: 'quant', description: 'HMM Regime', implemented: true },
-    { name: 'vol_regime', class_name: 'VolatilityRegimeModel', category: 'quant', description: 'Volatility Regime', implemented: true },
-    { name: 'mean_reversion', class_name: 'MeanReversionModel', category: 'quant', description: 'Mean Reversion', implemented: true },
-    { name: 'correlation', class_name: 'CorrelationRegimeModel', category: 'quant', description: 'Correlation Regime', implemented: true },
-    { name: 'rsi_divergence', class_name: 'RSIDivergenceModel', category: 'quant', description: 'RSI Divergence', implemented: true },
-]
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
+
+interface ModelInfo {
+    name: string
+    class_name: string
+    category: string
+    description: string
+    implemented: boolean
+}
 
 const categoryColors = {
     momentum: 'bg-purple-500/20 text-purple-400 border-purple-500/50',
@@ -44,22 +26,83 @@ const categoryDescriptions = {
     quant: 'Statistical and regime-based models',
 }
 
+// Default mock models
+const defaultModels: ModelInfo[] = [
+    { name: 'hqm', class_name: 'HQMModel', category: 'momentum', description: 'High-Quality Momentum', implemented: true },
+    { name: 'clenow', class_name: 'ClenowMomentumModel', category: 'momentum', description: 'Clenow Momentum', implemented: true },
+    { name: 'dual_momentum', class_name: 'DualMomentumModel', category: 'momentum', description: 'Dual Momentum', implemented: true },
+    { name: 'roc_multi', class_name: 'ROCMultiTimeframeModel', category: 'momentum', description: 'ROC Multi-Timeframe', implemented: true },
+    { name: '52w_high', class_name: 'FiftyTwoWeekHighModel', category: 'momentum', description: '52-Week High', implemented: true },
+    { name: 'adx', class_name: 'ADXTrendModel', category: 'trend', description: 'ADX Trend Strength', implemented: true },
+    { name: 'multi_ema', class_name: 'MultiEMAModel', category: 'trend', description: 'Multi-EMA Matrix', implemented: true },
+    { name: 'supertrend', class_name: 'SupertrendModel', category: 'trend', description: 'Supertrend', implemented: true },
+    { name: 'ichimoku', class_name: 'IchimokuModel', category: 'trend', description: 'Ichimoku Cloud', implemented: true },
+    { name: 'psar', class_name: 'ParabolicSARModel', category: 'trend', description: 'Parabolic SAR', implemented: true },
+    { name: 'quality', class_name: 'QualityModel', category: 'fundamental', description: 'Quality Factor', implemented: true },
+    { name: 'magic_formula', class_name: 'MagicFormulaModel', category: 'fundamental', description: 'Magic Formula', implemented: true },
+    { name: 'garp', class_name: 'GARPModel', category: 'fundamental', description: 'GARP', implemented: true },
+    { name: 'altman_z', class_name: 'AltmanZScoreModel', category: 'fundamental', description: 'Altman Z-Score', implemented: true },
+    { name: 'dividend', class_name: 'DividendModel', category: 'fundamental', description: 'Dividend Quality', implemented: true },
+    { name: 'hmm_regime', class_name: 'HMMRegimeModel', category: 'quant', description: 'HMM Regime', implemented: true },
+    { name: 'vol_regime', class_name: 'VolatilityRegimeModel', category: 'quant', description: 'Volatility Regime', implemented: true },
+    { name: 'mean_reversion', class_name: 'MeanReversionModel', category: 'quant', description: 'Mean Reversion', implemented: true },
+    { name: 'correlation', class_name: 'CorrelationRegimeModel', category: 'quant', description: 'Correlation Regime', implemented: true },
+    { name: 'rsi_divergence', class_name: 'RSIDivergenceModel', category: 'quant', description: 'RSI Divergence', implemented: true },
+]
+
 export default function ModelsPage() {
+    const [models, setModels] = useState<ModelInfo[]>(defaultModels)
+    const [loading, setLoading] = useState(true)
+    const [fromApi, setFromApi] = useState(false)
+    const [status, setStatus] = useState({ total: 20, implemented: 20 })
+
     const categories = ['momentum', 'trend', 'fundamental', 'quant']
 
+    useEffect(() => {
+        Promise.all([
+            fetch(`${API_URL}/models/`).then(r => r.json()).catch(() => null),
+            fetch(`${API_URL}/models/status`).then(r => r.json()).catch(() => null),
+        ])
+            .then(([modelsData, statusData]) => {
+                if (Array.isArray(modelsData) && modelsData.length > 0) {
+                    setModels(modelsData)
+                    setFromApi(true)
+                } else if (modelsData?.models) {
+                    setModels(modelsData.models)
+                    setFromApi(true)
+                }
+
+                if (statusData) {
+                    setStatus({
+                        total: statusData.total || 20,
+                        implemented: statusData.implemented || 20,
+                    })
+                }
+            })
+            .finally(() => setLoading(false))
+    }, [])
+
     const modelsByCategory = categories.reduce((acc, cat) => {
-        acc[cat] = mockModels.filter(m => m.category === cat)
+        acc[cat] = models.filter(m => m.category === cat)
         return acc
-    }, {} as Record<string, typeof mockModels>)
+    }, {} as Record<string, ModelInfo[]>)
+
+    const implementedCount = models.filter(m => m.implemented).length
+    const progress = (implementedCount / models.length) * 100
+
+    if (loading) {
+        return <div className="animate-pulse h-96 bg-zinc-800/50 rounded" />
+    }
 
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <h1 className="text-2xl font-bold text-white">Model Registry</h1>
                 <div className="flex items-center gap-2">
-                    <span className="text-bull font-medium">20</span>
+                    <span className="text-bull font-medium">{implementedCount}</span>
                     <span className="text-zinc-500">/</span>
-                    <span className="text-zinc-400">20 Implemented</span>
+                    <span className="text-zinc-400">{models.length} Implemented</span>
+                    {!fromApi && <span className="text-xs text-zinc-500 ml-2">(demo)</span>}
                 </div>
             </div>
 
@@ -67,9 +110,12 @@ export default function ModelsPage() {
             <div className="card">
                 <div className="flex items-center gap-4">
                     <div className="flex-1 h-2 bg-zinc-800 rounded-full overflow-hidden">
-                        <div className="h-full bg-bull rounded-full" style={{ width: '100%' }} />
+                        <div
+                            className="h-full bg-bull rounded-full transition-all"
+                            style={{ width: `${progress}%` }}
+                        />
                     </div>
-                    <div className="text-sm font-medium text-bull">100%</div>
+                    <div className="text-sm font-medium text-bull">{progress.toFixed(0)}%</div>
                 </div>
             </div>
 
@@ -81,7 +127,7 @@ export default function ModelsPage() {
                             <h2 className="text-lg font-semibold text-white capitalize">{category}</h2>
                             <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${categoryColors[category as keyof typeof categoryColors]
                                 }`}>
-                                {modelsByCategory[category].length} models
+                                {modelsByCategory[category]?.length || 0} models
                             </span>
                         </div>
                         <p className="text-sm text-zinc-500 mb-4">
@@ -89,7 +135,7 @@ export default function ModelsPage() {
                         </p>
 
                         <div className="space-y-2">
-                            {modelsByCategory[category].map((model) => (
+                            {modelsByCategory[category]?.map((model) => (
                                 <div
                                     key={model.name}
                                     className="flex items-center justify-between py-2 px-3 bg-zinc-800/50 rounded-lg"

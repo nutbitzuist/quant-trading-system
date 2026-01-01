@@ -1,6 +1,8 @@
 'use client'
 
-import { useSectorRotation } from '@/hooks/useData'
+import { useState, useEffect } from 'react'
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
 
 // RRG Quadrant colors
 const quadrantColors = {
@@ -16,8 +18,22 @@ const recommendationColors = {
     UNDERWEIGHT: 'text-bear',
 }
 
-// Mock data for demo
-const mockRRGData = [
+interface RRGData {
+    sector: string
+    rs_ratio: number
+    rs_momentum: number
+    quadrant: string
+    rotation_direction: string
+}
+
+interface SectorRotationData {
+    rrg_data: RRGData[]
+    sector_recommendations: Record<string, string>
+    cycle_phase: string
+}
+
+// Fallback mock data
+const mockRRGData: RRGData[] = [
     { sector: 'FINCIAL', rs_ratio: 103.5, rs_momentum: 102.1, quadrant: 'LEADING', rotation_direction: 'CLOCKWISE' },
     { sector: 'TECH', rs_ratio: 98.2, rs_momentum: 104.5, quadrant: 'IMPROVING', rotation_direction: 'COUNTER_CLOCKWISE' },
     { sector: 'INDUS', rs_ratio: 101.8, rs_momentum: 99.2, quadrant: 'WEAKENING', rotation_direction: 'CLOCKWISE' },
@@ -28,7 +44,7 @@ const mockRRGData = [
     { sector: 'AGRO', rs_ratio: 97.2, rs_momentum: 101.8, quadrant: 'IMPROVING', rotation_direction: 'COUNTER_CLOCKWISE' },
 ]
 
-const mockRecommendations = {
+const mockRecommendations: Record<string, string> = {
     FINCIAL: 'OVERWEIGHT',
     TECH: 'OVERWEIGHT',
     INDUS: 'NEUTRAL',
@@ -40,9 +56,41 @@ const mockRecommendations = {
 }
 
 export default function SectorsPage() {
+    const [rrg, setRrg] = useState<RRGData[]>(mockRRGData)
+    const [recommendations, setRecommendations] = useState<Record<string, string>>(mockRecommendations)
+    const [cyclePhase, setCyclePhase] = useState('MID_EXPANSION')
+    const [loading, setLoading] = useState(true)
+    const [fromApi, setFromApi] = useState(false)
+
+    useEffect(() => {
+        fetch(`${API_URL}/sector/rrg`)
+            .then(res => res.json())
+            .then((data: SectorRotationData) => {
+                if (data.rrg_data && data.rrg_data.length > 0) {
+                    setRrg(data.rrg_data)
+                    setFromApi(true)
+                }
+                if (data.sector_recommendations) {
+                    setRecommendations(data.sector_recommendations)
+                }
+                if (data.cycle_phase) {
+                    setCyclePhase(data.cycle_phase)
+                }
+            })
+            .catch(err => console.log('Using mock sector data:', err.message))
+            .finally(() => setLoading(false))
+    }, [])
+
+    if (loading) {
+        return <div className="animate-pulse h-96 bg-zinc-800/50 rounded" />
+    }
+
     return (
         <div className="space-y-6">
-            <h1 className="text-2xl font-bold text-white">Sector Rotation</h1>
+            <div className="flex items-center justify-between">
+                <h1 className="text-2xl font-bold text-white">Sector Rotation</h1>
+                {!fromApi && <span className="text-xs text-zinc-500">Demo data</span>}
+            </div>
 
             {/* RRG Visualization */}
             <div className="card">
@@ -63,8 +111,7 @@ export default function SectorsPage() {
                     <div className="absolute bottom-4 right-4 text-xs text-zinc-500">WEAKENING</div>
 
                     {/* Sector points */}
-                    {mockRRGData.map((sector) => {
-                        // Map to position (center = 100, scale by 5)
+                    {rrg.map((sector) => {
                         const x = 50 + (sector.rs_ratio - 100) * 5
                         const y = 50 - (sector.rs_momentum - 100) * 5
 
@@ -109,7 +156,7 @@ export default function SectorsPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {mockRRGData.map((sector) => (
+                            {rrg.map((sector) => (
                                 <tr key={sector.sector} className="border-b border-zinc-800/50">
                                     <td className="py-2 font-medium text-white">{sector.sector}</td>
                                     <td className="py-2 text-right font-mono text-zinc-300">{sector.rs_ratio.toFixed(1)}</td>
@@ -129,7 +176,7 @@ export default function SectorsPage() {
                 <div className="card">
                     <h2 className="card-header">Recommendations</h2>
                     <div className="space-y-3">
-                        {Object.entries(mockRecommendations).map(([sector, rec]) => (
+                        {Object.entries(recommendations).map(([sector, rec]) => (
                             <div key={sector} className="flex items-center justify-between">
                                 <span className="text-zinc-300">{sector}</span>
                                 <span className={`font-medium ${recommendationColors[rec as keyof typeof recommendationColors]
@@ -144,9 +191,8 @@ export default function SectorsPage() {
                         <h3 className="text-sm font-medium text-zinc-400 mb-2">Business Cycle</h3>
                         <div className="flex items-center gap-2">
                             <span className="px-3 py-1 bg-bull/20 text-bull rounded-full text-sm font-medium">
-                                MID-EXPANSION
+                                {cyclePhase.replace('_', '-')}
                             </span>
-                            <span className="text-xs text-zinc-500">Confidence: 72%</span>
                         </div>
                     </div>
                 </div>

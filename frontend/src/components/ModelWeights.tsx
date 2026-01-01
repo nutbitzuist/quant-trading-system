@@ -1,6 +1,17 @@
 'use client'
 
-const modelWeights = [
+import { useState, useEffect } from 'react'
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
+
+interface ModelWeight {
+    name: string
+    bull: number
+    bear: number
+    sideways: number
+}
+
+const defaultWeights: ModelWeight[] = [
     { name: 'HQM', bull: 1.2, bear: 0.5, sideways: 0.8 },
     { name: 'Clenow', bull: 1.0, bear: 0.6, sideways: 0.9 },
     { name: 'ADX', bull: 1.0, bear: 1.0, sideways: 0.5 },
@@ -10,7 +21,30 @@ const modelWeights = [
 ]
 
 export function ModelWeights() {
-    const currentRegime = 'BULL' // Would come from context
+    const [weights, setWeights] = useState<ModelWeight[]>(defaultWeights)
+    const [currentRegime, setCurrentRegime] = useState<string>('BULL')
+    const [loading, setLoading] = useState(true)
+
+    useEffect(() => {
+        Promise.all([
+            fetch(`${API_URL}/regime/weights`).then(r => r.json()).catch(() => null),
+            fetch(`${API_URL}/regime/current`).then(r => r.json()).catch(() => null),
+        ])
+            .then(([weightsData, regimeData]) => {
+                if (regimeData?.trend_regime || regimeData?.regime) {
+                    setCurrentRegime(regimeData.trend_regime || regimeData.regime)
+                }
+
+                if (weightsData?.weights || weightsData?.matrix) {
+                    const matrix = weightsData.weights || weightsData.matrix
+                    // Transform API weights to component format if needed
+                    if (Array.isArray(matrix)) {
+                        setWeights(matrix)
+                    }
+                }
+            })
+            .finally(() => setLoading(false))
+    }, [])
 
     const getBarWidth = (weight: number) => {
         const maxWeight = 2.0
@@ -23,10 +57,14 @@ export function ModelWeights() {
         return 'bg-zinc-700'
     }
 
+    if (loading) {
+        return <div className="animate-pulse h-48 bg-zinc-800/50 rounded" />
+    }
+
     return (
         <div className="space-y-3">
-            {modelWeights.map((model) => {
-                const weight = model[currentRegime.toLowerCase() as keyof typeof model] as number
+            {weights.map((model) => {
+                const weight = model[currentRegime.toLowerCase() as keyof typeof model] as number || 1.0
                 return (
                     <div key={model.name} className="flex items-center gap-3">
                         <div className="w-20 text-sm text-zinc-400">{model.name}</div>
@@ -43,7 +81,9 @@ export function ModelWeights() {
                 )
             })}
             <div className="pt-2 text-xs text-zinc-500 text-center">
-                Weights shown for {currentRegime} regime
+                Weights shown for <span className={`font-semibold ${currentRegime === 'BULL' ? 'text-bull' :
+                        currentRegime === 'BEAR' ? 'text-bear' : 'text-sideways'
+                    }`}>{currentRegime}</span> regime
             </div>
         </div>
     )

@@ -12,7 +12,7 @@ export default function Dashboard() {
                     Market Dashboard
                 </h1>
                 <div className="text-sm text-zinc-500">
-                    Last updated: {new Date().toLocaleTimeString()}
+                    SET Smart API Connected
                 </div>
             </div>
 
@@ -23,16 +23,16 @@ export default function Dashboard() {
                     <h2 className="card-header">Quick Stats</h2>
                     <div className="grid grid-cols-3 gap-4 text-center">
                         <div>
-                            <div className="text-3xl font-bold text-bull">12</div>
+                            <div className="text-3xl font-bold text-bull">20</div>
                             <div className="text-sm text-zinc-500">Active Models</div>
                         </div>
                         <div>
                             <div className="text-3xl font-bold text-white">100</div>
-                            <div className="text-sm text-zinc-500">Stocks Screened</div>
+                            <div className="text-sm text-zinc-500">SET100 Stocks</div>
                         </div>
                         <div>
-                            <div className="text-3xl font-bold text-thai-gold">78%</div>
-                            <div className="text-sm text-zinc-500">Model Agreement</div>
+                            <div className="text-3xl font-bold text-thai-gold">Live</div>
+                            <div className="text-sm text-zinc-500">Data Source</div>
                         </div>
                     </div>
                 </div>
