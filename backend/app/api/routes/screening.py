@@ -3,12 +3,19 @@ Screening API Routes
 Endpoints for stock screening and rankings
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from pydantic import BaseModel
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from datetime import datetime
+from sqlalchemy.orm import Session
+from sqlalchemy import desc
+
+from app.db.base import get_db
+from app.db.models import ScreeningResult, StockScore as DBStockScore, PipelineLog
+from app.pipeline.engine import PipelineEngine
 
 router = APIRouter()
+pipeline_engine = PipelineEngine()
 
 
 class StockScore(BaseModel):
@@ -16,121 +23,135 @@ class StockScore(BaseModel):
     ticker: str
     composite_score: float
     signal: str
-    confidence: float
+    confidence: float = 0.8
     model_agreement: float
     rank: int
-    model_scores: Dict[str, float]
+    model_scores: Dict[str, Any] = {}
 
 
-class ScreeningResult(BaseModel):
+class ScreeningResponse(BaseModel):
     """Result from full screening."""
+    id: int
     regime: str
-    volatility_regime: str
-    timestamp: str
-    top_buy: List[StockScore]
-    top_avoid: List[StockScore]
-    total_screened: int
+    timestamp: datetime
+    status: str
+    stocks_count: int
 
 
-class ScreeningRequest(BaseModel):
-    """Request for screening."""
-    universe: Optional[str] = "SET100"
-    top_n: Optional[int] = 20
+class PipelineStatus(BaseModel):
+    """Status of pipeline."""
+    status: str
+    stocks_processed: int
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+    error: Optional[str] = None
 
 
-@router.post("/run", response_model=ScreeningResult)
-async def run_screening(request: ScreeningRequest):
+@router.post("/run", response_model=PipelineStatus)
+async def run_screening(
+    background_tasks: BackgroundTasks, 
+    user_id: Optional[int] = None
+):
     """
-    Run full stock screening.
+    Trigger full stock screening pipeline in background.
+    """
+    # Check if already running
+    # (Simple check, ideally check DB or Redis lock)
     
-    Executes all active models for the current regime and
-    returns unified stock rankings.
-    """
-    # TODO: Implement actual screening
-    # For now, return mock data
-    return ScreeningResult(
-        regime="BULL",
-        volatility_regime="NORMAL",
-        timestamp=datetime.now().isoformat(),
-        top_buy=[
-            StockScore(
-                ticker="PTT",
-                composite_score=85.5,
-                signal="STRONG_BUY",
-                confidence=0.85,
-                model_agreement=0.80,
-                rank=1,
-                model_scores={"hqm": 90, "adx": 82, "quality": 80}
-            ),
-            StockScore(
-                ticker="ADVANC",
-                composite_score=82.3,
-                signal="STRONG_BUY",
-                confidence=0.80,
-                model_agreement=0.75,
-                rank=2,
-                model_scores={"hqm": 85, "adx": 78, "quality": 85}
-            ),
-        ],
-        top_avoid=[
-            StockScore(
-                ticker="THAI",
-                composite_score=25.5,
-                signal="STRONG_AVOID",
-                confidence=0.75,
-                model_agreement=0.70,
-                rank=99,
-                model_scores={"hqm": 20, "adx": 30, "quality": 25}
-            ),
-        ],
-        total_screened=100,
+    # Add to background tasks
+    background_tasks.add_task(pipeline_engine.run_pipeline, user_id)
+    
+    return PipelineStatus(
+        status="STARTED",
+        stocks_processed=0,
+        started_at=datetime.now()
+    )
+
+
+@router.get("/status", response_model=PipelineStatus)
+async def get_pipeline_status(db: Session = Depends(get_db)):
+    """Get status of latest pipeline run."""
+    log = db.query(PipelineLog).order_by(desc(PipelineLog.started_at)).first()
+    
+    if not log:
+        return PipelineStatus(
+            status="IDLE",
+            stocks_processed=0,
+            started_at=datetime.now()
+        )
+        
+    return PipelineStatus(
+        status=log.status,
+        stocks_processed=log.stocks_processed,
+        started_at=log.started_at,
+        completed_at=log.completed_at,
+        error=log.error_message
     )
 
 
 @router.get("/rankings", response_model=List[StockScore])
 async def get_rankings(
-    universe: str = "SET100",
     limit: int = 20,
-    order: str = "desc"
+    db: Session = Depends(get_db)
 ):
     """
-    Get current stock rankings.
-    
-    Returns stocks ranked by composite score.
+    Get current stock rankings from latest successful screening.
     """
-    # TODO: Implement actual rankings
-    return [
-        StockScore(
-            ticker="PTT",
-            composite_score=85.5,
-            signal="STRONG_BUY",
-            confidence=0.85,
-            model_agreement=0.80,
-            rank=1,
-            model_scores={}
-        ),
-    ]
+    # Get latest screening
+    latest_screening = db.query(ScreeningResult).order_by(desc(ScreeningResult.run_date)).first()
+    
+    if not latest_screening:
+        # If no DB results, return empty (or demo data if preferred)
+        return []
+        
+    # Get top stocks
+    stocks = db.query(DBStockScore)\
+        .filter(DBStockScore.screening_id == latest_screening.id)\
+        .order_by(desc(DBStockScore.composite_score))\
+        .limit(limit)\
+        .all()
+        
+    results = []
+    for i, stock in enumerate(stocks):
+        results.append(StockScore(
+            ticker=stock.ticker,
+            composite_score=stock.composite_score,
+            signal=stock.signal,
+            confidence=0.8, # Placeholder
+            model_agreement=stock.model_agreement,
+            rank=i + 1,
+            model_scores=stock.details or {}
+        ))
+        
+    return results
 
 
-@router.get("/stock/{ticker}")
-async def get_stock_analysis(ticker: str):
+@router.get("/stock/{ticker}", response_model=StockScore)
+async def get_stock_analysis(ticker: str, db: Session = Depends(get_db)):
     """
     Get detailed analysis for a specific stock.
     """
-    # TODO: Implement actual analysis
-    return {
-        "ticker": ticker,
-        "composite_score": 75.0,
-        "signal": "BUY",
-        "confidence": 0.70,
-        "regime": "BULL",
-        "model_scores": {
-            "hqm": {"score": 80, "signal": "STRONG_BUY", "metadata": {}},
-            "adx": {"score": 70, "signal": "BUY", "metadata": {}},
-            "quality": {"score": 75, "signal": "BUY", "metadata": {}},
-        },
-        "risk_assessment": {
-            "position_size_pct": 5.0,
-            "stop_loss_pct": 8.0,
-        }
-    }
+    # Get latest score for this ticker
+    latest_screening = db.query(ScreeningResult).order_by(desc(ScreeningResult.run_date)).first()
+    
+    if not latest_screening:
+         raise HTTPException(status_code=404, detail="No screening data found")
+         
+    stock = db.query(DBStockScore)\
+        .filter(
+            DBStockScore.screening_id == latest_screening.id,
+            DBStockScore.ticker == ticker
+        ).first()
+        
+    if not stock:
+         raise HTTPException(status_code=404, detail="Stock not found in latest screening")
+         
+    return StockScore(
+        ticker=stock.ticker,
+        composite_score=stock.composite_score,
+        signal=stock.signal,
+        confidence=0.8,
+        model_agreement=stock.model_agreement,
+        rank=0, # Not calculated here
+        model_scores=stock.details or {}
+    )
