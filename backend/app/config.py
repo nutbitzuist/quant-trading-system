@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     # Database (optional for future)
     database_url: Optional[str] = None
     
+    # Auth settings
+    auth_secret_key: str = "your-secret-key-change-in-production"
+    jwt_expire_minutes: int = 60
+    
     # External APIs (optional)
     setsmart_api_key: Optional[str] = None
     

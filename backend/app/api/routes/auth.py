@@ -2,11 +2,20 @@
 Authentication API Routes
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Header
-from pydantic import BaseModel, EmailStr
-from typing import Optional
+from fastapi import APIRouter, HTTPException, Depends, status
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+from datetime import timedelta
 
-from app.core.auth import AuthService, User, Token
+from app.core.auth import (
+    authenticate_user, 
+    create_access_token, 
+    get_password_hash, 
+    get_current_active_user,
+    ACCESS_TOKEN_EXPIRE_MINUTES
+)
+from app.db.base import get_db
+from app.db.models import User
 
 router = APIRouter()
 
@@ -19,93 +28,76 @@ class LoginRequest(BaseModel):
 class RegisterRequest(BaseModel):
     email: str
     password: str
+    full_name: str = None
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+    expires_in: int
 
 
 class UserResponse(BaseModel):
-    id: str
+    id: int
     email: str
+    full_name: str = None
     is_active: bool
-
-
-async def get_current_user(authorization: Optional[str] = Header(None)) -> User:
-    """Dependency to get current authenticated user."""
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    
-    # Extract token from "Bearer <token>"
-    parts = authorization.split()
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        raise HTTPException(status_code=401, detail="Invalid authorization header")
-    
-    token = parts[1]
-    user = AuthService.get_current_user(token)
-    
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-    
-    return user
+    is_superuser: bool
 
 
 @router.post("/login", response_model=Token)
-async def login(request: LoginRequest):
+async def login(request: LoginRequest, db: Session = Depends(get_db)):
     """
     Login with email and password.
-    
     Returns access token.
     """
-    user = AuthService.authenticate(request.email, request.password)
-    
+    user = await authenticate_user(db, request.email, request.password)
     if not user:
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     
-    token = AuthService.create_token(user)
-    
-    return Token(
-        access_token=token.access_token,
-        expires_in=token.expires_in
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.email}, expires_delta=access_token_expires
     )
+    
+    return {
+        "access_token": access_token, 
+        "token_type": "bearer",
+        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    }
 
 
 @router.post("/register", response_model=UserResponse)
-async def register(request: RegisterRequest):
+async def register(request: RegisterRequest, db: Session = Depends(get_db)):
     """
     Register new user.
     """
     # Check if user exists
-    if request.email in AuthService._users:
+    db_user = db.query(User).filter(User.email == request.email).first()
+    if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
     
-    user = AuthService.create_user(request.email, request.password)
-    
-    return UserResponse(
-        id=user.id,
-        email=user.email,
-        is_active=user.is_active
+    # Create user
+    new_user = User(
+        email=request.email,
+        hashed_password=get_password_hash(request.password),
+        full_name=request.full_name
     )
+    
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    
+    return new_user
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_me(user: User = Depends(get_current_user)):
+async def get_me(current_user: User = Depends(get_current_active_user)):
     """
     Get current user info.
     """
-    return UserResponse(
-        id=user.id,
-        email=user.email,
-        is_active=user.is_active
-    )
-
-
-@router.post("/logout")
-async def logout(authorization: Optional[str] = Header(None)):
-    """
-    Logout (invalidate token).
-    """
-    if authorization:
-        parts = authorization.split()
-        if len(parts) == 2:
-            token = parts[1]
-            if token in AuthService._tokens:
-                del AuthService._tokens[token]
-    
-    return {"message": "Logged out successfully"}
+    return current_user

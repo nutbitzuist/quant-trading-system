@@ -9,6 +9,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.api.routes import regime, models, screening, sector, reports, auth, data
 
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifecycle events: DB Init on startup"""
+    try:
+        from app.db.init_db import init_db
+        from app.db.base import SessionLocal
+        db = SessionLocal()
+        init_db(db)
+        db.close()
+        print("Database initialized successfully")
+    except Exception as e:
+        print(f"Database initialization failed (non-critical if using external migration): {e}")
+    yield
+
 # Create FastAPI app
 app = FastAPI(
     title=settings.app_name,
@@ -16,6 +32,7 @@ app = FastAPI(
     description="Renaissance-style Quantitative Trading System for Thai SET100",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # CORS middleware
