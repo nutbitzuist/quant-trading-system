@@ -70,6 +70,28 @@ class StockScore(Base):
     screening = relationship("ScreeningResult", back_populates="scores")
 
 
+class BacktestResult(Base):
+    """Backtest execution results"""
+    __tablename__ = "backtest_results"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    strategy_name = Column(String)
+    ticker = Column(String)
+    start_date = Column(DateTime)
+    end_date = Column(DateTime)
+    initial_capital = Column(Float)
+    final_capital = Column(Float)
+    total_return = Column(Float)
+    sharpe_ratio = Column(Float)
+    max_drawdown = Column(Float)
+    trades_count = Column(Integer)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Store equity curve and trades as JSON
+    equity_curve = Column(JSON)
+    trades = Column(JSON)
+
+
 class PipelineLog(Base):
     """Log of pipeline execution runs"""
     __tablename__ = "pipeline_logs"
