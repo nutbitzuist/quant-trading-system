@@ -158,6 +158,9 @@ class PipelineEngine:
             'volume': volume
         }, index=dates)
         
+        # Set the name for model identification
+        df.name = ticker
+        
         return df
             
     async def _process_stock(self, ticker: str, regime_state):

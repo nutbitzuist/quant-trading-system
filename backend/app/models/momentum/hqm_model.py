@@ -208,5 +208,15 @@ class HQMModel(BaseModel):
             return prices['ticker'].unique().tolist()
         elif isinstance(prices.index, pd.MultiIndex):
             return prices.index.get_level_values(0).unique().tolist()
+        elif hasattr(prices, 'name') and prices.name:
+            # Single-stock OHLCV DataFrame with name attribute set
+            return [prices.name]
+        elif 'close' in prices.columns:
+            # Single-stock OHLCV format - use 'close' column name property
+            close_series = prices['close']
+            if hasattr(close_series, 'name') and close_series.name and close_series.name != 'close':
+                return [close_series.name]
+            # Fallback: This is a single unnamed stock
+            return ['UNKNOWN']
         else:
             return list(prices.columns)
