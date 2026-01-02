@@ -55,11 +55,11 @@ class PipelineEngine:
             # 2. Determine Regime (using dummy index data for now or fetch real)
             # Fetch SET Index history
             set_history = await self.data_client.get_index_history("SET", days=365)
-            if set_history.empty:
-                 # Fallback mock history if API fails
-                 regime_state = self.regime_engine.detect_regime(pd.DataFrame()) 
-            else:
-                 regime_state = self.regime_engine.detect_regime(set_history)
+            if set_history.empty or 'close' not in set_history.columns:
+                # Use mock index data if API fails
+                print("Using mock index data for regime detection (API returned empty)")
+                set_history = self._generate_mock_ohlcv("SET_INDEX", days=365)
+            regime_state = self.regime_engine.detect_regime(set_history)
             
             # 3. Create Screening Result entry
             screening = ScreeningResult(
