@@ -11,7 +11,7 @@ from pydantic import BaseModel
 import traceback
 
 from app.config import settings
-from app.db.session import get_db
+from app.db.base import get_db
 from app.db.models import PipelineLog, ScreeningResult, StockScore
 
 router = APIRouter()
