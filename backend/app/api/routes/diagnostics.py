@@ -13,6 +13,7 @@ import traceback
 from app.config import settings
 from app.db.base import get_db
 from app.db.models import PipelineLog, ScreeningResult, StockScore
+from app.models.registry import MODEL_REGISTRY
 
 router = APIRouter()
 
@@ -105,32 +106,14 @@ def set_data_source_status(status: str, using_mock: bool = False):
     _runtime_state["last_api_check"] = datetime.now()
 
 
-# All 20 models from architecture
+# Use centralized MODEL_REGISTRY instead of hardcoded list
 ALL_MODELS = {
-    # Momentum (5)
-    "hqm": {"name": "High-Quality Momentum", "category": "momentum", "implemented": True},
-    "clenow": {"name": "Clenow Momentum", "category": "momentum", "implemented": False},
-    "dual_momentum": {"name": "Dual Momentum", "category": "momentum", "implemented": False},
-    "roc_multi": {"name": "ROC Multi-Timeframe", "category": "momentum", "implemented": False},
-    "52w_high": {"name": "52-Week High", "category": "momentum", "implemented": False},
-    # Trend (5)
-    "adx": {"name": "ADX Trend", "category": "trend", "implemented": True},
-    "multi_ema": {"name": "Multi-EMA Matrix", "category": "trend", "implemented": False},
-    "supertrend": {"name": "Supertrend", "category": "trend", "implemented": False},
-    "ichimoku": {"name": "Ichimoku Cloud", "category": "trend", "implemented": False},
-    "psar": {"name": "Parabolic SAR", "category": "trend", "implemented": False},
-    # Fundamental (5)
-    "magic_formula": {"name": "Magic Formula", "category": "fundamental", "implemented": False},
-    "garp": {"name": "GARP", "category": "fundamental", "implemented": False},
-    "quality": {"name": "Quality Factor", "category": "fundamental", "implemented": True},
-    "altman_z": {"name": "Altman Z-Score", "category": "fundamental", "implemented": False},
-    "dividend": {"name": "Dividend Quality", "category": "fundamental", "implemented": False},
-    # Quant (5)
-    "hmm_regime": {"name": "HMM Regime", "category": "quant", "implemented": False},
-    "vol_regime": {"name": "Volatility Regime", "category": "quant", "implemented": False},
-    "mean_reversion": {"name": "Mean Reversion", "category": "quant", "implemented": False},
-    "correlation": {"name": "Correlation Regime", "category": "quant", "implemented": False},
-    "rsi_divergence": {"name": "RSI Divergence", "category": "quant", "implemented": False},
+    model_id: {
+        "name": model_info.description.split(":")[0] if ":" in model_info.description else model_info.name,
+        "category": model_info.category,
+        "implemented": model_info.implemented
+    }
+    for model_id, model_info in MODEL_REGISTRY.items()
 }
 
 

@@ -73,14 +73,26 @@ class PipelineEngine:
                 log_event("info", f"Fetched {len(tickers)} tickers from API")
                 set_data_source_status("connected", using_mock=False)
             
-            # 2. Determine Regime (using dummy index data for now or fetch real)
-            # Fetch SET Index history
+            # 2. Determine Regime
+            # Fetch SET Index history - client now has Yahoo fallback
             set_history = await self.data_client.get_index_history("SET", days=365)
             if set_history.empty or 'close' not in set_history.columns:
-                # Use mock index data if API fails
-                log_event("warning", "Using mock index data for regime detection (API returned empty)")
-                set_history = self._generate_mock_ohlcv("SET_INDEX", days=365)
-            regime_state = self.regime_engine.detect_regime(set_history)
+                # Client couldn't get data from ANY source (SET Smart + Yahoo)
+                log_event("error", "Could not fetch SET Index from any source")
+                set_data_source_status("error", using_mock=True)
+                # Use a default regime since we can't detect
+                from app.models.base import Regime, VolatilityRegime, RegimeState
+                regime_state = RegimeState(
+                    trend_regime=Regime.SIDEWAYS,
+                    volatility_regime=VolatilityRegime.NORMAL,
+                    confidence=0.0,
+                    active_models=[],
+                    model_weights={},
+                    position_size_multiplier=0.5
+                )
+            else:
+                set_data_source_status("connected", using_mock=False)
+                regime_state = self.regime_engine.detect_regime(set_history)
             
             log_event("info", f"Regime detected: {regime_state.trend_regime.value}", {
                 "confidence": regime_state.confidence,
@@ -212,13 +224,13 @@ class PipelineEngine:
     async def _process_stock(self, ticker: str, regime_state):
         """Process a single stock: fetch data -> run orchestrator."""
         try:
-            # Fetch history from API
+            # Fetch history from API (client has Yahoo fallback built-in)
             history = await self.data_client.get_stock_history(ticker, days=365)
             
-            # If API fails or returns empty, use mock data
+            # If ALL sources failed (SET Smart + Yahoo), skip this stock
             if history.empty or 'close' not in history.columns:
-                print(f"Using mock data for {ticker} (API returned empty or invalid data)")
-                history = self._generate_mock_ohlcv(ticker, days=365)
+                print(f"Skipping {ticker}: No data from any source")
+                return None
                 
             # Run Orchestrator
             results = self.orchestrator.execute_models(
@@ -227,26 +239,12 @@ class PipelineEngine:
             )
             
             if results:
-                result = results[0] # Should be only one result for one ticker
-                # Override ticker with actual ticker name (models may not extract it correctly)
+                result = results[0]
                 result.ticker = ticker
                 return result
             return None
             
         except Exception as e:
             print(f"Error processing {ticker}: {e}")
-            # Use mock data as fallback
-            try:
-                history = self._generate_mock_ohlcv(ticker, days=365)
-                results = self.orchestrator.execute_models(
-                    prices=history,
-                    regime_state=regime_state
-                )
-                if results:
-                    result = results[0]
-                    result.ticker = ticker  # Override with actual ticker
-                    return result
-            except Exception as e2:
-                print(f"Mock data also failed for {ticker}: {e2}")
             return None
 
