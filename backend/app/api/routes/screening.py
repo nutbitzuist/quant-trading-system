@@ -49,17 +49,13 @@ class PipelineStatus(BaseModel):
 
 @router.post("/run", response_model=PipelineStatus)
 async def run_screening(
-    background_tasks: BackgroundTasks, 
-    user_id: Optional[int] = None
+    background_tasks: BackgroundTasks
 ):
     """
     Trigger full stock screening pipeline in background.
     """
-    # Check if already running
-    # (Simple check, ideally check DB or Redis lock)
-    
     # Add to background tasks
-    background_tasks.add_task(pipeline_engine.run_pipeline, user_id)
+    background_tasks.add_task(pipeline_engine.run_pipeline, None)
     
     return PipelineStatus(
         status="STARTED",
