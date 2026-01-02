@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Any
 from pydantic import BaseModel
 import traceback
 
-from app.core.config import settings
+from app.config import settings
 from app.db.session import get_db
 from app.db.models import PipelineLog, ScreeningResult, StockScore
 
