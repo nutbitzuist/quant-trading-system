@@ -46,20 +46,46 @@ class PipelineEngine:
         db.refresh(log)
         
         try:
+            # Import diagnostic logging
+            from app.api.routes.diagnostics import log_event, log_stock_result, set_data_source_status
+            
+            log_event("info", "Pipeline started", {"user_id": user_id})
+            
             # 1. Fetch Universe (SET100)
             tickers = await self.data_client.get_set100()
             if not tickers:
                 # Fallback to hardcoded list if API fails
-                tickers = ["DELTA", "PTT", "AOT", "KBANK", "SCB", "ADVANC", "GULF", "CPALL", "BDMS", "SCC"]
+                log_event("warning", "SET100 API failed, using hardcoded list")
+                set_data_source_status("fallback", using_mock=True)
+                tickers = [
+                    "ADVANC", "AOT", "AWC", "BANPU", "BBL", "BDMS", "BEM", "BGRIM", "BH", "BTS",
+                    "CBG", "CENTEL", "CHG", "CK", "CKP", "COM7", "CPALL", "CPF", "CPN", "CRC",
+                    "DELTA", "DOHOME", "EA", "EGCO", "EPG", "GLOBAL", "GPSC", "GULF", "HMPRO", "INTUCH",
+                    "IVL", "JMT", "JMART", "KBANK", "KCE", "KKP", "KTB", "KTC", "LH", "MAJOR",
+                    "MEGA", "MINT", "MTC", "NRF", "OR", "ORI", "OSP", "PLANB", "PRM", "PTG",
+                    "PTT", "PTTEP", "PTTGC", "QH", "RATCH", "RS", "SAWAD", "SCB", "SCC", "SCGP",
+                    "SINGER", "SPALI", "SPRC", "STA", "STEC", "SUPER", "TASCO", "TCAP", "THAI", "THANI",
+                    "TISCO", "TKN", "TMB", "TOP", "TRUE", "TTB", "TTW", "TU", "TVO", "VGI",
+                    "WHA", "WHAUP", "AAV", "AIMIRT", "BCH", "BCPG", "BLA", "BROOK", "BTG", "HUMAN",
+                    "IRPC", "JAS", "MC", "MFEC", "MK", "NER", "NEUTRAL", "PR9", "PSL", "PJW"
+                ]
+            else:
+                log_event("info", f"Fetched {len(tickers)} tickers from API")
+                set_data_source_status("connected", using_mock=False)
             
             # 2. Determine Regime (using dummy index data for now or fetch real)
             # Fetch SET Index history
             set_history = await self.data_client.get_index_history("SET", days=365)
             if set_history.empty or 'close' not in set_history.columns:
                 # Use mock index data if API fails
-                print("Using mock index data for regime detection (API returned empty)")
+                log_event("warning", "Using mock index data for regime detection (API returned empty)")
                 set_history = self._generate_mock_ohlcv("SET_INDEX", days=365)
             regime_state = self.regime_engine.detect_regime(set_history)
+            
+            log_event("info", f"Regime detected: {regime_state.trend_regime.value}", {
+                "confidence": regime_state.confidence,
+                "volatility": regime_state.volatility_regime.value
+            })
             
             # 3. Create Screening Result entry
             screening = ScreeningResult(
@@ -72,9 +98,10 @@ class PipelineEngine:
             
             # 4. Loop stocks and run models
             processed_count = 0
+            failed_count = 0
             
             # Use chunks to avoid hitting API limits too hard
-            chunk_size = 5
+            chunk_size = 10  # Increased for faster processing
             for i in range(0, len(tickers), chunk_size):
                 chunk = tickers[i:i+chunk_size]
                 
@@ -82,21 +109,30 @@ class PipelineEngine:
                 for ticker in chunk:
                     tasks.append(self._process_stock(ticker, regime_state))
                 
-                results = await asyncio.gather(*tasks)
+                results = await asyncio.gather(*tasks, return_exceptions=True)
                 
                 # Save results
-                for res in results:
-                    if res:
+                for idx, res in enumerate(results):
+                    ticker = chunk[idx]
+                    if isinstance(res, Exception):
+                        log_stock_result(ticker, success=False, error=str(res))
+                        log_event("error", f"Failed to process {ticker}", {"error": str(res)})
+                        failed_count += 1
+                    elif res:
                         score_entry = StockScore(
                             screening_id=screening.id,
                             ticker=res.ticker,
                             composite_score=res.composite_score,
-                            signal=res.model_signals.get("composite", "HOLD"), # Use composite signal logic
+                            signal=res.model_signals.get("composite", "HOLD"),
                             model_agreement=res.model_agreement,
-                            details=res.model_scores # Store raw scores as JSON
+                            details=res.model_scores
                         )
                         db.add(score_entry)
                         processed_count += 1
+                        log_stock_result(ticker, success=True)
+                    else:
+                        log_stock_result(ticker, success=False, error="No result returned")
+                        failed_count += 1
                 
                 db.commit()
                 
@@ -104,13 +140,18 @@ class PipelineEngine:
                 log.stocks_processed = processed_count
                 db.commit()
                 
+                # Progress log
+                log_event("info", f"Progress: {processed_count}/{len(tickers)} processed, {failed_count} failed")
+                
                 # Tiny sleep to be nice to API
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.2)
             
             # Complete log
             log.status = "COMPLETED"
             log.completed_at = datetime.utcnow()
             db.commit()
+            
+            log_event("info", f"Pipeline completed: {processed_count} stocks processed, {failed_count} failed")
             
             return screening.id
             
@@ -121,6 +162,11 @@ class PipelineEngine:
             log.completed_at = datetime.utcnow()
             db.commit()
             print(f"Pipeline failed: {e}")
+            try:
+                from app.api.routes.diagnostics import log_event
+                log_event("error", f"Pipeline failed: {str(e)}")
+            except:
+                pass
             raise e
         finally:
             db.close()

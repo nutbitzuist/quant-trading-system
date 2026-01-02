@@ -90,6 +90,14 @@ app.include_router(
     tags=["Backtesting"]
 )
 
+from app.api.routes import diagnostics
+
+app.include_router(
+    diagnostics.router,
+    prefix=f"{settings.api_prefix}/diagnostics",
+    tags=["System Diagnostics"]
+)
+
 
 @app.get("/")
 async def root():

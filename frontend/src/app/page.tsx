@@ -3,6 +3,7 @@ import { ModelWeights } from '@/components/ModelWeights'
 import { StockRankings } from '@/components/StockRankings'
 import { ModelAgreement } from '@/components/ModelAgreement'
 import RunScreeningButton from '@/components/RunScreeningButton'
+import SystemStatus from '@/components/SystemStatus'
 
 export default function Dashboard() {
     return (
@@ -14,11 +15,11 @@ export default function Dashboard() {
                 </h1>
                 <div className="flex items-center gap-4">
                     <RunScreeningButton />
-                    <div className="text-sm text-zinc-500">
-                        SET Smart API Connected
-                    </div>
                 </div>
             </div>
+
+            {/* System Status - NEW */}
+            <SystemStatus />
 
             {/* Regime Row */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -71,3 +72,4 @@ export default function Dashboard() {
         </div>
     )
 }
+
