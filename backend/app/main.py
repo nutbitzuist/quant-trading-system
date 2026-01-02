@@ -71,16 +71,17 @@ app.include_router(
     prefix=f"{settings.api_prefix}/reports",
     tags=["Reports"]
 )
+app.include_router(
+    data.router,
     prefix=f"{settings.api_prefix}/data",
     tags=["Market Data"]
 )
 app.include_router(
-    auth.router, # Note: using auth from updated api.routes
+    auth.router,
     prefix=f"{settings.api_prefix}/auth",
     tags=["Authentication"]
 )
-# We also need to fix the duplicate auth router issue if I messed up imports
-# Let's check imports
+
 from app.api.routes import backtest
 
 app.include_router(
