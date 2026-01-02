@@ -274,6 +274,41 @@ class SetSmartClient:
         data = await self._request("GET", "/stock/quote", {"symbol": ticker}, use_cache=False)
         return data.get("data", {})
     
+    # ============== Alias methods for pipeline compatibility ==============
+    
+    async def get_set100(self) -> List[str]:
+        """Alias for get_stock_list('SET100') - used by pipeline."""
+        tickers = await self.get_stock_list("SET100")
+        if not tickers:
+            # Fallback to hardcoded SET100 list if API fails
+            return [
+                "ADVANC", "AOT", "AWC", "BANPU", "BBL", "BDMS", "BEM", "BGRIM", "BH", "BTS",
+                "CBG", "CENTEL", "CHG", "CK", "CKP", "COM7", "CPALL", "CPF", "CPN", "CRC",
+                "DELTA", "DOHOME", "EA", "EGCO", "EPG", "GLOBAL", "GPSC", "GULF", "HMPRO", "INTUCH",
+                "IVL", "JMT", "JMART", "KBANK", "KCE", "KKP", "KTB", "KTC", "LH", "MAJOR",
+                "MEGA", "MINT", "MTC", "NRF", "OR", "ORI", "OSP", "PLANB", "PRM", "PTG",
+                "PTT", "PTTEP", "PTTGC", "QH", "RATCH", "RS", "SAWAD", "SCB", "SCC", "SCGP",
+                "SINGER", "SPALI", "SPRC", "STA", "STEC", "SUPER", "TASCO", "TCAP", "THAI", "THANI",
+                "TISCO", "TKN", "TMB", "TOP", "TRUE", "TTB", "TTW", "TU", "TVO", "VGI",
+                "WHA", "WHAUP", "AAV", "AIMIRT", "BCH", "BCPG", "BLA", "BROOK", "BTG", "HUMAN",
+                "IRPC", "JAS", "MC", "MFEC", "MK", "NER", "NEUTRAL", "PR9", "PSL", "PJW"
+            ]
+        return tickers
+    
+    async def get_stock_history(self, ticker: str, days: int = 365) -> pd.DataFrame:
+        """Alias for get_price_history - used by pipeline."""
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=days)
+        return await self.get_price_history(
+            ticker,
+            start_date=start_date.strftime("%Y-%m-%d"),
+            end_date=end_date.strftime("%Y-%m-%d")
+        )
+    
+    async def get_index_history(self, index: str = "SET", days: int = 365) -> pd.DataFrame:
+        """Alias for get_index_data - used by pipeline."""
+        return await self.get_index_data(index, period="1y")
+    
     async def close(self):
         """Close the HTTP client."""
         await self._client.aclose()
