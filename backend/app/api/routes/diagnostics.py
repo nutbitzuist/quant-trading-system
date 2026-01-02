@@ -144,7 +144,7 @@ async def get_system_health(db: Session = Depends(get_db)):
     latest_log = db.query(PipelineLog).order_by(PipelineLog.started_at.desc()).first()
     
     # Get latest screening result
-    latest_screening = db.query(ScreeningResult).order_by(ScreeningResult.created_at.desc()).first()
+    latest_screening = db.query(ScreeningResult).order_by(ScreeningResult.run_date.desc()).first()
     
     # Count stocks in latest screening
     stocks_count = 0
