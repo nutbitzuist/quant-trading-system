@@ -22,12 +22,14 @@ python-multipart>=0.0.6
 pandas>=2.0.0
 numpy>=1.24.0
 
-# Scientific Computing
+# Scientific Computing & Quant
 scipy>=1.10.0
 scikit-learn>=1.2.0
+hmmlearn>=0.3.0
 
-# HTTP Client
+# Data Sources
 httpx>=0.24.0
+yfinance>=0.2.36
 
 # Environment
 python-dotenv>=1.0.0

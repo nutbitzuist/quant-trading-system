@@ -29,7 +29,10 @@ class Settings(BaseSettings):
         return [origin.strip() for origin in self.cors_origins_str.split(",") if origin.strip()]
     
     # Data settings
-    data_cache_ttl: int = 3600  # 1 hour
+    data_cache_ttl: int = 3600    # Data Source
+    SETSMART_API_KEY: str = os.getenv("SETSMART_API_KEY", "ae6ca019-be14-4e6b-997b-9fcbe02b1166")
+    SETSMART_API_URL: str = os.getenv("SETSMART_API_URL", "https://api.setsmart.com/api/v1")
+    YAHOO_FALLBACK: bool = True
     
     # SET100 Universe
     default_universe: str = "SET100"

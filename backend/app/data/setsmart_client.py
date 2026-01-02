@@ -9,6 +9,8 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import pandas as pd
+import yfinance as yf
+from app.config import settings
 
 
 @dataclass
@@ -17,6 +19,7 @@ class SetSmartConfig:
     api_key: str = ""
     base_url: str = "https://api.setsmart.com"
     timeout: int = 30
+    yahoo_fallback: bool = True
     
     @classmethod
     def from_env(cls) -> "SetSmartConfig":
@@ -24,6 +27,7 @@ class SetSmartConfig:
         return cls(
             api_key=os.getenv("SETSMART_API_KEY", ""),
             base_url=os.getenv("SETSMART_BASE_URL", "https://api.setsmart.com"),
+            yahoo_fallback=os.getenv("YAHOO_FALLBACK", "True").lower() == "true",
         )
 
 
@@ -128,7 +132,55 @@ class SetSmartClient:
             
         except httpx.HTTPError as e:
             print(f"SET Smart API error: {e}")
+            if self.config.yahoo_fallback:
+                return {"error": "api_failed", "use_fallback": True}
             return {}
+            
+    def _fetch_yahoo_history(self, ticker: str, start_date: str, end_date: str) -> pd.DataFrame:
+        """Fetch history from Yahoo Finance."""
+        try:
+            # Handle index tickers
+            yf_ticker = ticker
+            if ticker == "SET": yf_ticker = "^SET.BK"
+            elif ticker == "SET50": yf_ticker = "^SET50.BK"
+            elif ticker == "SET100": yf_ticker = "^SET100.BK"
+            elif not ticker.endswith(".BK") and not ticker.startswith("^"):
+                yf_ticker = f"{ticker}.BK"
+            
+            print(f"Fetching Yahoo data for {yf_ticker} ({start_date} to {end_date})")
+            df = yf.download(yf_ticker, start=start_date, end=end_date, progress=False)
+            
+            if df.empty:
+                return pd.DataFrame()
+            
+            # Reset index to make 'Date' a column
+            df = df.reset_index()
+            
+            # Normalize columns
+            df.columns = [c.lower() for c in df.columns]
+            
+            # Rename adj close if present, or just close
+            if 'adj close' in df.columns:
+                df = df.rename(columns={'adj close': 'close'})
+            
+            # Ensure required columns
+            required = ['date', 'open', 'high', 'low', 'close', 'volume']
+            for col in required:
+                if col not in df.columns:
+                    if col == 'volume' and 'vol' in df.columns:
+                        df = df.rename(columns={'vol': 'volume'})
+                    else:
+                        # Missing column
+                        return pd.DataFrame()
+            
+            # Filter and format
+            df['date'] = pd.to_datetime(df['date'])
+            df = df.set_index('date')
+            return df[required[1:]] # Return OHLCV
+            
+        except Exception as e:
+            print(f"Yahoo Finance error for {ticker}: {e}")
+            return pd.DataFrame()
     
     async def get_stock_list(self, market: str = "SET100") -> List[str]:
         """
@@ -172,7 +224,26 @@ class SetSmartClient:
         
         data = await self._request("GET", "/stock/price/history", params)
         
+        # Check for fallback trigger
+        if self.config.yahoo_fallback and (not data or data.get("error") == "api_failed"):
+            print(f"Falling back to Yahoo Finance for {ticker}")
+            # Calculate dates if period provided
+            if not start_date or not end_date:
+                end_dt = datetime.now()
+                days = 30
+                if period == "1y": days = 365
+                elif period == "6m": days = 180
+                elif period == "3m": days = 90
+                start_dt = end_dt - timedelta(days=days)
+                
+                start_date = start_dt.strftime("%Y-%m-%d")
+                end_date = end_dt.strftime("%Y-%m-%d")
+                
+            return self._fetch_yahoo_history(ticker, start_date, end_date)
+        
         if not data.get("data"):
+            if self.config.yahoo_fallback:
+                return self._fetch_yahoo_history(ticker, start_date or "2023-01-01", end_date or datetime.now().strftime("%Y-%m-%d"))
             return pd.DataFrame()
         
         df = pd.DataFrame(data["data"])
@@ -246,7 +317,7 @@ class SetSmartClient:
         Returns:
             DataFrame with index OHLCV
         """
-        return await self.get_price_history(f"^{index}", period=period)
+        return await self.get_price_history(index, period=period)
     
     async def get_sector_data(self, sector: str) -> Dict:
         """

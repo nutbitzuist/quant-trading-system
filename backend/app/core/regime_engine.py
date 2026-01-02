@@ -7,7 +7,10 @@ from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional
 from enum import Enum
 import pandas as pd
+import pandas as pd
 import numpy as np
+from hmmlearn.hmm import GaussianHMM
+from app.api.routes.diagnostics import log_event
 
 from app.models.base import Regime, VolatilityRegime, RegimeState, WEIGHT_MATRIX
 
@@ -80,6 +83,85 @@ class RegimeEngine:
         self.trend_lookback = trend_lookback
         self.vol_lookback = vol_lookback
         self.vol_history = vol_history
+        self.hmm_model = None
+        self.hmm_states_map = {} # Map state_id -> Regime (0 -> BEAR, 1 -> BULL)
+    
+    def _train_hmm(self, prices: pd.Series) -> bool:
+        """Train Gaussian HMM on historical data."""
+        try:
+            # Prepare data: Returns and Volatility
+            returns = prices.pct_change().dropna()
+            vol = returns.rolling(10).std().dropna()
+            
+            # Align indices
+            common = returns.index.intersection(vol.index)
+            data = pd.DataFrame({
+                'returns': returns.loc[common],
+                'vol': vol.loc[common]
+            })
+            
+            # Observations matrix
+            X = data.values
+            
+            # Train model
+            self.hmm_model = GaussianHMM(n_components=3, covariance_type="full", n_iter=100)
+            self.hmm_model.fit(X)
+            
+            # Identify states
+            means = self.hmm_model.means_
+            # means[:, 0] is returns mean
+            # Sort states by return mean
+            state_order = np.argsort(means[:, 0])
+            
+            # Map: Lowest return = BEAR, Middle = SIDEWAYS, Highest = BULL
+            self.hmm_states_map = {
+                state_order[0]: Regime.BEAR,
+                state_order[1]: Regime.SIDEWAYS,
+                state_order[2]: Regime.BULL
+            }
+            
+            log_event("info", f"HMM Trained. States: {self.hmm_states_map}")
+            return True
+            
+        except Exception as e:
+            log_event("error", f"HMM Training failed: {e}")
+            return False
+
+    def _predict_hmm_regime(self, prices: pd.Series) -> Tuple[Regime, float]:
+        """Predict current regime using HMM."""
+        if self.hmm_model is None:
+            # Train on available history
+            success = self._train_hmm(prices)
+            if not success:
+                return Regime.SIDEWAYS, 0.0
+        
+        try:
+            # Prepare recent data sequence
+            returns = prices.pct_change().dropna()
+            vol = returns.rolling(10).std().dropna()
+            common = returns.index.intersection(vol.index)
+            
+            # Use last 50 days to predict current state path
+            recent = common[-50:]
+            X = pd.DataFrame({
+                'returns': returns.loc[recent],
+                'vol': vol.loc[recent]
+            }).values
+            
+            hidden_states = self.hmm_model.predict(X)
+            current_state = hidden_states[-1]
+            
+            regime = self.hmm_states_map.get(current_state, Regime.SIDEWAYS)
+            
+            # Confidence based on posterior probability
+            posteriors = self.hmm_model.predict_proba(X)
+            confidence = posteriors[-1][current_state]
+            
+            return regime, round(confidence, 2)
+            
+        except Exception as e:
+            log_event("error", f"HMM Prediction failed: {e}")
+            return Regime.SIDEWAYS, 0.0
     
     def detect_regime(
         self,
@@ -96,8 +178,21 @@ class RegimeEngine:
         Returns:
             RegimeState with trend, volatility, active models, weights
         """
-        # Detect trend regime
-        trend_regime, trend_confidence = self._detect_trend_regime(market_data)
+        # Try HMM Detection first (Primary)
+        # We need historical data for HMM. 
+        # market_data provided here might be short (just OHLCV).
+        # We implicitly assume market_data has enough history (e.g. 1 year+)
+        
+        hmm_regime = Regime.SIDEWAYS
+        hmm_conf = 0.0
+        
+        if len(market_data) > 200:
+            hmm_regime, hmm_conf = self._predict_hmm_regime(market_data['close'])
+            trend_regime = hmm_regime
+            trend_confidence = hmm_conf
+        else:
+            # Fallback to Rule-based if not enough data
+            trend_regime, trend_confidence = self._detect_trend_regime(market_data)
         
         # Detect volatility regime
         vol_regime, vol_data = self._detect_volatility_regime(market_data)
