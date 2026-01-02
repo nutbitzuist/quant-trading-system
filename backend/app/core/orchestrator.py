@@ -63,29 +63,24 @@ class ModelOrchestrator:
     
     def _get_model_class(self, model_name: str) -> Optional[type]:
         """Get model class by name."""
-        # Import models dynamically
+        # Get info from registry
         model_info = MODEL_REGISTRY.get(model_name)
-        if not model_info or not model_info.implemented:
+        if not model_info:
             return None
         
-        # Model imports
-        model_imports = {
-            "hqm": ("app.models.momentum.hqm_model", "HQMModel"),
-            "adx": ("app.models.trend.adx_trend", "ADXTrendModel"),
-            "quality": ("app.models.fundamental.quality", "QualityModel"),
-        }
+        if not model_info.implemented:
+            # Check if file actually exists just in case registry is outdated
+            # But normally we respect the flag. 
+            # For now, we trust registry is source of truth.
+            return None
         
-        if model_name in model_imports:
-            module_path, class_name = model_imports[model_name]
-            try:
-                import importlib
-                module = importlib.import_module(module_path)
-                return getattr(module, class_name)
-            except Exception as e:
-                print(f"Could not import {model_name}: {e}")
-                return None
-        
-        return None
+        try:
+            import importlib
+            module = importlib.import_module(model_info.module_path)
+            return getattr(module, model_info.class_name)
+        except Exception as e:
+            print(f"Could not import {model_name} from {model_info.module_path}: {e}")
+            return None
     
     def execute_models(
         self,
