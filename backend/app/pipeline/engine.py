@@ -181,7 +181,10 @@ class PipelineEngine:
             )
             
             if results:
-                return results[0] # Should be only one result for one ticker
+                result = results[0] # Should be only one result for one ticker
+                # Override ticker with actual ticker name (models may not extract it correctly)
+                result.ticker = ticker
+                return result
             return None
             
         except Exception as e:
@@ -194,7 +197,9 @@ class PipelineEngine:
                     regime_state=regime_state
                 )
                 if results:
-                    return results[0]
+                    result = results[0]
+                    result.ticker = ticker  # Override with actual ticker
+                    return result
             except Exception as e2:
                 print(f"Mock data also failed for {ticker}: {e2}")
             return None
